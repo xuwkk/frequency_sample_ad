@@ -194,8 +194,10 @@ class AugementModel(DynModel):
         return value, grad
     
     @staticmethod
-    def pick_value_grad(output, idx, state_idx):
-        output_reshape = output[torch.arange(output.shape[0]), idx].reshape(output.shape[0], -1, 2)
+    def pick_value_grad(output, time_idx, state_idx):
+        # ! output: (batch_size, no_sys_state * (no_params + 1))
+        batch_size = output.shape[0]
+        output_reshape = output[torch.arange(batch_size), time_idx].reshape(output.shape[0], -1, 2)
         value = output_reshape[:, 0, state_idx]
         grad = output_reshape[:, 1:, state_idx]
         

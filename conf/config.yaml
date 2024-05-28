@@ -1,16 +1,19 @@
 hyperparams:
-  batch_size: 5
+  batch_size: 10
   t0: 0.0
   t1: 20.0
   dt: 0.05
   method: "euler"
   device: "cuda:0"
+  sample_no: 10
+  step_size: 5
+  max_iter: 20
 system_params:
   base: 50
   max_ss_dev: 0.5
   max_nadir_dev: 0.8
   max_rocof: 1
-  delta_P: -0.1
+  delta_P: -0.12
   tau: 10.0
   r: 0.06
   M0: 6.0

@@ -1,6 +1,5 @@
 import sys
 sys.path.append('.')
-from model import SimpleModel_omega_q, SimpleModel_omega_omegadot, SimpleModel_omega_omegadot_feedback
 from ode_solver import solve
 import torch
 from omegaconf import DictConfig, OmegaConf

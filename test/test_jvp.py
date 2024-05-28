@@ -1,6 +1,5 @@
 import sys
 sys.path.append('.')
-from model import SimpleModel_omega_omegadot_feedback
 import torch
 from omegaconf import DictConfig, OmegaConf
 import hydra

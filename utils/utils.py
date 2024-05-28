@@ -2,6 +2,63 @@ import numpy as np
 import torch
 import random
 import matplotlib.pyplot as plt
+import sys
+sys.path.append('.')
+from model import (SimpleModel_omega_omegadot_feedback, 
+                    AugementModel, SimpleModel_omega_q, 
+                    SimpleModel_omega_omegadot)
+
+def to_numpy(tensor):
+    """
+    convert a tensor to numpy
+    """
+    return tensor.detach().cpu().numpy()
+
+def initialize_model(name, system_params, hyperparams):
+
+    if name == "SimpleModel_omega_omegadot_feedback":
+        cons_params = {
+            "delta_P": system_params.delta_P,
+            "tau": system_params.tau,
+            "r": system_params.r,
+            "M": system_params.M0,  # ! regard as constant parameter
+            "D": system_params.D0,
+        }
+
+        model = SimpleModel_omega_omegadot_feedback(cons_params, device = hyperparams.device)
+
+    elif name == "AugementModel":
+        cons_params = {
+            "delta_P": system_params.delta_P,
+            "tau": system_params.tau,
+            "r": system_params.r,
+            "M": system_params.M0,  # ! regard as constant parameter
+            "D": system_params.D0,
+        }
+        
+        model = AugementModel(cons_params, device = hyperparams.device)
+        
+    elif name == "SimpleModel_omega_q":
+        
+        cons_params = {
+        "delta_P": system_params.delta_P,
+        "tau": system_params.tau,
+        "r": system_params.r,
+        }
+
+        model = SimpleModel_omega_q(cons_params, device = hyperparams.device)
+
+    elif name == "SimpleModel_omega_omegadot":
+
+        cons_params = {
+        "delta_P": system_params.delta_P,
+        "tau": system_params.tau,
+        "r": system_params.r,
+        }
+
+        model = SimpleModel_omega_omegadot(cons_params, device = hyperparams.device)
+        
+    return model
 
 def plot(omega, d_omega, title, cfg):
 

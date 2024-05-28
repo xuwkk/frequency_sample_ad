@@ -4,14 +4,10 @@ test with the backward propagation
 
 import sys
 sys.path.append('.')
-from model import SimpleModel_omega_omegadot_feedback, AugementModel
+from model import AugementModel
 import torch
 from omegaconf import DictConfig, OmegaConf
 import hydra
-import torch.autograd.forward_ad as fwAD
-from torch.autograd.functional import jacobian
-from torch.func import jvp
-from functools import partial
 from utils import set_random_seed, initialize_model
 from ode_solver import solve
 import time
@@ -37,7 +33,7 @@ def main(cfg: DictConfig):
         "K": K,
     }
 
-    watched_idx = -1
+    watched_idx = 0
 
     """
     backward propagation
@@ -72,6 +68,12 @@ def main(cfg: DictConfig):
     """
     fmad
     """
+
+    def modify_grad(output, time_idx, state_idx):
+        value, grad = AugementModel.pick_value_grad(output = output, time_idx = time_idx, state_idx = state_idx)
+        value_abs, grad_abs = AugementModel.abs_loss(value)
+        
+        return value_abs, grad * grad_abs.unsqueeze(1)
     
     model_2 = initialize_model("AugementModel", system_params, hyperparams)
 
@@ -83,21 +85,15 @@ def main(cfg: DictConfig):
     print('time_fmad_all:', time.time() - time_fmad)
 
     # ss
-    freq_ss_2, grad_freq_ss_2 = AugementModel.pick_value_grad(output = output_2, idx = -1, state_idx = 0)
-    freq_ss_2, grad_freq_ss_abs_2 = AugementModel.abs_loss(freq_ss_2)
-    grad_freq_ss_2 = grad_freq_ss_2 * grad_freq_ss_abs_2.unsqueeze(1)
+    freq_ss_2, grad_freq_ss_2 = modify_grad(output_2, time_idx = -1, state_idx = 0)
 
     # nadir
     nadir_idx = torch.argmax(torch.abs(output_2[:, :, 0]), dim=1)
-    freq_nadir_2, grad_freq_nadir_2 = AugementModel.pick_value_grad(output_2, nadir_idx, 0)
-    freq_nadir_2, grad_freq_nadir_abs_2 = AugementModel.abs_loss(freq_nadir_2)
-    grad_freq_nadir_2 = grad_freq_nadir_2 * grad_freq_nadir_abs_2.unsqueeze(1)
+    freq_nadir_2, grad_freq_nadir_2 = modify_grad(output_2, time_idx = nadir_idx, state_idx = 0)
 
     # rocof
     rocof_idx = torch.argmax(torch.abs(output_2[:,:, 1]), dim=1)
-    freq_rocof_2, grad_freq_rocof_2 = AugementModel.pick_value_grad(output_2, rocof_idx, 1)
-    freq_rocof_2, grad_freq_rocof_abs_2 = AugementModel.abs_loss(freq_rocof_2)
-    grad_freq_rocof_2 = grad_freq_rocof_2 * grad_freq_rocof_abs_2.unsqueeze(1)
+    freq_rocof_2, grad_freq_rocof_2 = modify_grad(output_2, time_idx = rocof_idx, state_idx = 1)
 
     assert torch.isclose(freq_ss_1, freq_ss_2[watched_idx])
     assert torch.allclose(grad_freq_ss_1, grad_freq_ss_2[watched_idx])
