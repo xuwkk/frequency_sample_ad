@@ -12,7 +12,7 @@ import torch.autograd.forward_ad as fwAD
 from torch.autograd.functional import jacobian
 from torch.func import jvp
 from functools import partial
-from utils import set_random_seed
+from utils import set_random_seed, initialize_model
 from ode_solver import solve
 import time
 
@@ -25,96 +25,86 @@ def main(cfg: DictConfig):
 
     hyperparams = cfg['hyperparams']
     system_params = cfg['system_params']
-    """
-    the omega-omegadot model with state feedback
-    """
 
-    cons_params = {
-        "delta_P": system_params.delta_P,
-        "tau": system_params.tau,
-        "r": system_params.r,
-        "M": system_params.M0,  # ! regard as constant parameter
-        "D": system_params.D0,
-    }
+    model_name = "SimpleModel_omega_omegadot_feedback"
 
-    K = torch.randn(1, 4).to(hyperparams.device) * 20
+    model = initialize_model(model_name, system_params, hyperparams)
+    
+    batch_size = 5
+    K = torch.randn(batch_size, 4).to(hyperparams.device) * 20
 
     diff_params = {
         "K": K,
     }
 
+    watched_idx = -1
+
     """
     backward propagation
     """
-    model = SimpleModel_omega_omegadot_feedback(cons_params, device = hyperparams.device)
     initial_state = model.get_initial_state(K)
-    
+
     K.requires_grad = True
 
-    
     with torch.enable_grad():
         backward_solution_time = time.time()
         output_1 = solve(model, **hyperparams, **diff_params, y0 = initial_state)
         print('backward_solution_time:', time.time() - backward_solution_time)
 
         backward_backward_time = time.time()    
-        freq_ss = system_params.base * (1 + output_1[0][-1, 0])
-        freq_ss.backward(retain_graph=True)
-        grad_freq_ss = K.grad.clone()
+        freq_ss_1 = torch.abs(output_1[watched_idx][-1, 0])
+        freq_ss_1.backward(retain_graph=True)
+        grad_freq_ss_1 = K.grad.clone()[watched_idx]
         K.grad.zero_()
         
-        freq_nadir = system_params.base * (1 + torch.max(torch.abs(output_1[0][:, 0])))
-        freq_nadir.backward(retain_graph=True)
-        grad_freq_nadir = K.grad.clone()
+        freq_nadir_1 = torch.max(torch.abs(output_1[watched_idx][:, 0]))
+        freq_nadir_1.backward(retain_graph=True)
+        grad_freq_nadir_1 = K.grad.clone()[watched_idx]
         K.grad.zero_()
 
-        freq_rocof = system_params.base * torch.max(torch.abs(output_1[0][:, 1]))
-        freq_rocof.backward()
-        grad_freq_rocof = K.grad.clone()
+        freq_rocof_1 = torch.max(torch.abs(output_1[watched_idx][:, 1]))
+        freq_rocof_1.backward()
+        grad_freq_rocof_1 = K.grad.clone()[watched_idx]
         K.grad.zero_()
 
         print('backward_backward_time:', time.time() - backward_backward_time)
     
-    print('output_1:', output_1.shape)
-    print('freq_ss:', freq_ss)
-    print('grad_freq_ss:', grad_freq_ss)
-    print('freq_nadir:', freq_nadir)
-    print('grad_freq_nadir:', grad_freq_nadir)
-    print('freq_rocof:', freq_rocof)
-    print('grad_freq_rocof:', grad_freq_rocof)
-
-
-    print("====================================")
     """
     fmad
     """
-    model = AugementModel(cons_params, device=hyperparams.device)
-    initial_state = model.get_initial_state(K.requires_grad_(False))
+    
+    model_2 = initialize_model("AugementModel", system_params, hyperparams)
+
+    initial_state = model_2.get_initial_state(K.requires_grad_(False))
 
     time_fmad = time.time()
     with torch.no_grad():
-        output_2 = solve(model, **hyperparams, **diff_params, y0 = initial_state) # (batch_size, time_steps, state_dim)
+        output_2 = solve(model_2, **hyperparams, **diff_params, y0 = initial_state) # (batch_size, time_steps, state_dim)
     print('time_fmad_all:', time.time() - time_fmad)
 
-    freq_ss = system_params.base * (1 + output_2[0][-1, 0])
-    grad_freq_ss = output_2[0][-1].reshape(-1,2)[1:,0] * system_params.base
+    # ss
+    freq_ss_2, grad_freq_ss_2 = AugementModel.pick_value_grad(output = output_2, idx = -1, state_idx = 0)
+    freq_ss_2, grad_freq_ss_abs_2 = AugementModel.abs_loss(freq_ss_2)
+    grad_freq_ss_2 = grad_freq_ss_2 * grad_freq_ss_abs_2.unsqueeze(1)
 
-    nadir_idx = torch.argmax(torch.abs(output_2[0][:, 0]))
-    freq_nadir = system_params.base * (1 + torch.abs(output_2[0][nadir_idx, 0]))
-    grad_freq_nadir = output_2[0][nadir_idx].reshape(-1,2)[1:,0] * system_params.base
+    # nadir
+    nadir_idx = torch.argmax(torch.abs(output_2[:, :, 0]), dim=1)
+    freq_nadir_2, grad_freq_nadir_2 = AugementModel.pick_value_grad(output_2, nadir_idx, 0)
+    freq_nadir_2, grad_freq_nadir_abs_2 = AugementModel.abs_loss(freq_nadir_2)
+    grad_freq_nadir_2 = grad_freq_nadir_2 * grad_freq_nadir_abs_2.unsqueeze(1)
 
-    rocof_idx = torch.argmax(torch.abs(output_2[0][:, 1]))
-    freq_rocof = system_params.base * torch.abs(output_2[0][rocof_idx, 1])
-    grad_freq_rocof = output_2[0][rocof_idx].reshape(-1,2)[1:,1] * system_params.base
+    # rocof
+    rocof_idx = torch.argmax(torch.abs(output_2[:,:, 1]), dim=1)
+    freq_rocof_2, grad_freq_rocof_2 = AugementModel.pick_value_grad(output_2, rocof_idx, 1)
+    freq_rocof_2, grad_freq_rocof_abs_2 = AugementModel.abs_loss(freq_rocof_2)
+    grad_freq_rocof_2 = grad_freq_rocof_2 * grad_freq_rocof_abs_2.unsqueeze(1)
 
-    
-
-    print('freq_ss:', freq_ss)
-    print('grad_freq_ss:', grad_freq_ss)
-    print('freq_nadir:', freq_nadir)
-    print('grad_freq_nadir:', grad_freq_nadir)
-    print('freq_rocof:', freq_rocof)
-    print('grad_freq_rocof:', grad_freq_rocof)
+    assert torch.isclose(freq_ss_1, freq_ss_2[watched_idx])
+    assert torch.allclose(grad_freq_ss_1, grad_freq_ss_2[watched_idx])
+    assert torch.isclose(freq_nadir_1, freq_nadir_2[watched_idx])
+    assert torch.allclose(grad_freq_nadir_1, grad_freq_nadir_2[watched_idx])
+    assert torch.isclose(freq_rocof_1, freq_rocof_2[watched_idx])
+    assert torch.allclose(grad_freq_rocof_1, grad_freq_rocof_2[watched_idx])
 
 if __name__ == "__main__":
     main()

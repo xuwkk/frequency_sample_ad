@@ -185,3 +185,18 @@ class AugementModel(DynModel):
         aug_state_all = torch.concat(aug_state_all, dim=1)
 
         return torch.concat([output, aug_state_all], dim=1)
+    
+    @staticmethod
+    def abs_loss(output):
+        value = torch.abs(output)
+        grad = torch.sign(output)
+
+        return value, grad
+    
+    @staticmethod
+    def pick_value_grad(output, idx, state_idx):
+        output_reshape = output[torch.arange(output.shape[0]), idx].reshape(output.shape[0], -1, 2)
+        value = output_reshape[:, 0, state_idx]
+        grad = output_reshape[:, 1:, state_idx]
+        
+        return value, grad

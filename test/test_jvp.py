@@ -8,7 +8,7 @@ import torch.autograd.forward_ad as fwAD
 from torch.autograd.functional import jacobian
 from torch.func import jvp
 from functools import partial
-from utils import set_random_seed
+from utils import set_random_seed, initialize_model
 
 def jvp_fmad(state, K, model, x_dot, e):
 
@@ -77,21 +77,13 @@ def main(cfg: DictConfig):
     the omega-omegadot model with state feedback
     """
 
-    cons_params = {
-        "delta_P": system_params.delta_P,
-        "tau": system_params.tau,
-        "r": system_params.r,
-        "M": system_params.M0,  # ! regard as constant parameter
-        "D": system_params.D0,
-    }
-
     K = torch.zeros(hyperparams.batch_size, 4).to(hyperparams.device)
 
     diff_params = {
         "K": K,
     }
 
-    model = SimpleModel_omega_omegadot_feedback(cons_params, device=hyperparams.device)
+    model = initialize_model("SimpleModel_omega_omegadot_feedback", system_params, hyperparams)
     initial_state = model.get_initial_state(K)
 
     no_sys_state = 2

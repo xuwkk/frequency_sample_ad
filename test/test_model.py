@@ -5,7 +5,7 @@ from ode_solver import solve
 import torch
 from omegaconf import DictConfig, OmegaConf
 import hydra
-from utils import plot, to_numpy
+from utils import plot, to_numpy, initialize_model
 
 @hydra.main(version_base=None, config_path="../conf", config_name="config")
 def test_model(cfg: DictConfig):
@@ -24,7 +24,7 @@ def test_model(cfg: DictConfig):
         "r": system_params.r,
     }
 
-    model_1 = SimpleModel_omega_q(cons_params, device = hyperparams.device)
+    model_1 = initialize_model("SimpleModel_omega_q", system_params, hyperparams)
     M = system_params.M0 * torch.ones(hyperparams.batch_size, 1).to(hyperparams.device)
     D = system_params.M0 * torch.ones(hyperparams.batch_size, 1).to(hyperparams.device)
 
@@ -44,7 +44,7 @@ def test_model(cfg: DictConfig):
     the omega-omegadot model
     """
 
-    model_2 = SimpleModel_omega_omegadot(cons_params, device = hyperparams.device)
+    model_2 = initialize_model("SimpleModel_omega_omegadot", system_params, hyperparams)
     initial_state = model_2.get_initial_state(M,D)
     output_2 = solve(model_2, **hyperparams, **diff_params, y0 = initial_state)
 
@@ -68,7 +68,7 @@ def test_model(cfg: DictConfig):
         "K": K,
     }
 
-    model_3 = SimpleModel_omega_omegadot_feedback(cons_params, device=hyperparams.device)
+    model_3 = initialize_model("SimpleModel_omega_omegadot_feedback", system_params, hyperparams)
     initial_state = model_3.get_initial_state(K)
 
     output_3 = solve(model_3, **hyperparams, **diff_params, y0 = initial_state)
