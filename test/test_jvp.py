@@ -85,22 +85,21 @@ def main(cfg: DictConfig):
         "D": system_params.D0,
     }
 
-    K = torch.zeros(hyperparams.batch_size, 4)
+    K = torch.zeros(hyperparams.batch_size, 4).to(hyperparams.device)
 
     diff_params = {
         "K": K,
     }
 
-    model = SimpleModel_omega_omegadot_feedback(cons_params)
+    model = SimpleModel_omega_omegadot_feedback(cons_params, device=hyperparams.device)
     initial_state = model.get_initial_state(K)
-    t = 0.
 
     no_sys_state = 2
     no_aug_state = 8
 
     # tangent
-    x_dot = torch.randn((hyperparams.batch_size, no_sys_state * K.shape[1])) # (batch_size, no_sys_state * no_diff_params)
-    e = torch.eye(K.shape[1]).unsqueeze(0).repeat(hyperparams.batch_size, 1, 1) 
+    x_dot = torch.randn((hyperparams.batch_size, no_sys_state * K.shape[1])).to(hyperparams.device) # (batch_size, no_sys_state * no_diff_params)
+    e = torch.eye(K.shape[1]).unsqueeze(0).repeat(hyperparams.batch_size, 1, 1).to(hyperparams.device) 
     
     update_sys_1, update_aug_1 = jvp_fmad(initial_state, K, model, x_dot, e)
     update_sys_2, update_aug_2 = jvp_fmad_simple(initial_state, K, model, x_dot, e)

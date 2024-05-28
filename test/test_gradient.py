@@ -37,7 +37,7 @@ def main(cfg: DictConfig):
         "D": system_params.D0,
     }
 
-    K = torch.randn(1, 4) * 20
+    K = torch.randn(1, 4).to(hyperparams.device) * 20
 
     diff_params = {
         "K": K,
@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
     """
     backward propagation
     """
-    model = SimpleModel_omega_omegadot_feedback(cons_params)
+    model = SimpleModel_omega_omegadot_feedback(cons_params, device = hyperparams.device)
     initial_state = model.get_initial_state(K)
     
     K.requires_grad = True
@@ -88,7 +88,7 @@ def main(cfg: DictConfig):
     """
     fmad
     """
-    model = AugementModel(cons_params)
+    model = AugementModel(cons_params, device=hyperparams.device)
     initial_state = model.get_initial_state(K.requires_grad_(False))
 
     time_fmad = time.time()

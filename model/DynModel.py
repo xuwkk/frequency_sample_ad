@@ -56,7 +56,7 @@ class SimpleModel_omega_q(DynModel):
     
     def forward(self, t: float, state: torch.Tensor, M: torch.Tensor, D: torch.Tensor, **kwargs):
         omega, q = state[:,0:1], state[:,1:2]
-        d_omega = (-D * omega +q + self.delta_P) / M
+        d_omega = (-D * omega + q + self.delta_P) / M
         d_q = (-1/self.r * omega - q) / self.tau
 
         return torch.concat([d_omega, d_q], dim=1)
@@ -100,7 +100,7 @@ class SimpleModel_omega_omegadot_feedback(DynModel):
     # the initial M and D should be the constant parameters
 
     def get_initial_state(self, K: torch.Tensor):
-        omega_init = torch.zeros((K.shape[0], 1))
+        omega_init = torch.zeros((K.shape[0], 1)).to(K.device)
         # we can only have the minus sign here
         omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
         # eliminate nan
@@ -134,14 +134,14 @@ class AugementModel(DynModel):
 
     def get_initial_state(self, K: torch.Tensor):
 
-        omega_init = torch.zeros((K.shape[0], 1))
+        omega_init = torch.zeros((K.shape[0], 1)).to(K.device)
         # we can only have the minus sign here, see the proof in the paper
         omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
         # eliminate nan
         omega_dot_init[torch.isnan(omega_dot_init)] = self.delta_P / self.M
 
         # tangent state
-        tangent_state_init = torch.zeros((omega_dot_init.shape[0], K.shape[1] * 2))
+        tangent_state_init = torch.zeros((omega_dot_init.shape[0], K.shape[1] * 2)).to(K.device)
 
         return torch.concat([omega_init, omega_dot_init, tangent_state_init], dim=1)
     

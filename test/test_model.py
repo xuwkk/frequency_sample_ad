@@ -5,7 +5,7 @@ from ode_solver import solve
 import torch
 from omegaconf import DictConfig, OmegaConf
 import hydra
-from utils import plot
+from utils import plot, to_numpy
 
 @hydra.main(version_base=None, config_path="../conf", config_name="config")
 def test_model(cfg: DictConfig):
@@ -25,8 +25,8 @@ def test_model(cfg: DictConfig):
     }
 
     model_1 = SimpleModel_omega_q(cons_params, device = hyperparams.device)
-    M = system_params.M0 * torch.ones(hyperparams.batch_size, 1)
-    D = system_params.M0 * torch.ones(hyperparams.batch_size, 1)
+    M = system_params.M0 * torch.ones(hyperparams.batch_size, 1).to(hyperparams.device)
+    D = system_params.M0 * torch.ones(hyperparams.batch_size, 1).to(hyperparams.device)
 
     diff_params = {
         "M": M,
@@ -37,19 +37,18 @@ def test_model(cfg: DictConfig):
     output_1 = solve(model_1, **hyperparams, **diff_params, y0 = initial_state)
     d_omega = model_1.cal_d_omega(omega = output_1[:,:,0], q = output_1[:,:,1], M = M, D = D)
     sample_idx = 1
-    plot(output_1[sample_idx, :, 0].detach().numpy(), d_omega[sample_idx, :].detach().numpy(), "test/omega_q", cfg)
 
-    exit()
+    plot(to_numpy(output_1[sample_idx, :, 0]), to_numpy(d_omega[sample_idx, :]), "test/omega_q", cfg)
+
     """
     the omega-omegadot model
     """
 
-    model_2 = SimpleModel_omega_omegadot(cons_params)
+    model_2 = SimpleModel_omega_omegadot(cons_params, device = hyperparams.device)
     initial_state = model_2.get_initial_state(M,D)
     output_2 = solve(model_2, **hyperparams, **diff_params, y0 = initial_state)
 
-    plot(output_2[sample_idx, :, 0].detach().numpy(), output_2[sample_idx, :, 1].detach().numpy(), 
-        "test/omega_omegadot", cfg)
+    plot(to_numpy(output_2[sample_idx, :, 0]), to_numpy(output_2[sample_idx, :, 1]), "test/omega_omegadot", cfg)
 
     """
     the omega-omegadot model with state feedback
@@ -63,25 +62,24 @@ def test_model(cfg: DictConfig):
         "D": system_params.D0,
     }
 
-    K = torch.zeros(hyperparams.batch_size, 4)
+    K = torch.zeros(hyperparams.batch_size, 4).to(hyperparams.device)
 
     diff_params = {
         "K": K,
     }
 
-    model_3 = SimpleModel_omega_omegadot_feedback(cons_params)
+    model_3 = SimpleModel_omega_omegadot_feedback(cons_params, device=hyperparams.device)
     initial_state = model_3.get_initial_state(K)
 
     output_3 = solve(model_3, **hyperparams, **diff_params, y0 = initial_state)
 
-    plot(output_3[sample_idx, :, 0].detach().numpy(), output_3[sample_idx, :, 1].detach().numpy(), 
-        "test/omega_omegadot_feedback", cfg)
+    plot(to_numpy(output_3[sample_idx, :, 0]), to_numpy(output_3[sample_idx, :, 1]), "test/omega_omegadot_feedback", cfg)
     
     """
     change the K values
     """
-    K = - torch.randn(hyperparams.batch_size, 4) * 100
-    K[:, 1:2] = - torch.ones_like(K[:, 1:2]) * 10
+    K = - torch.randn(hyperparams.batch_size, 4).to(hyperparams.device) * 100
+    K[:, 1:2] = - torch.ones_like(K[:, 1:2]).to(hyperparams.device) * 10
     diff_params = {
         "K": K,
     }
@@ -89,8 +87,8 @@ def test_model(cfg: DictConfig):
     initial_state = model_3.get_initial_state(K)
     output_3 = solve(model_3, **hyperparams, **diff_params, y0 = initial_state)
 
-    plot(output_3[sample_idx, :, 0].detach().numpy(), output_3[sample_idx, :, 1].detach().numpy(), 
-        "test/omega_omegadot_feedback_K1", cfg)
+    plot(to_numpy(output_3[sample_idx, :, 0]), to_numpy(output_3[sample_idx, :, 1]), 
+        "test/omega_omegadot_feedback_K", cfg)
     
 
 if __name__ == "__main__":
