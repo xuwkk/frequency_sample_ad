@@ -17,7 +17,7 @@ def main(cfg: DictConfig):
 
     set_random_seed(100)
 
-    print(OmegaConf.to_yaml(cfg))
+    torch.set_default_dtype(torch.float64)
 
     hyperparams = cfg['hyperparams']
     system_params = cfg['system_params']
@@ -26,7 +26,7 @@ def main(cfg: DictConfig):
 
     model = initialize_model(model_name, system_params, hyperparams)
     
-    batch_size = 5
+    batch_size = 1
     K = torch.randn(batch_size, 4).to(hyperparams.device) * 20
 
     diff_params = {
@@ -38,11 +38,12 @@ def main(cfg: DictConfig):
     """
     backward propagation
     """
-    initial_state = model.get_initial_state(K)
-
+    
     K.requires_grad = True
 
     with torch.enable_grad():
+        # ! the initial value is also a function of K
+        initial_state = model.get_initial_state(K)  # initial state is also a function of K
         backward_solution_time = time.time()
         output_1 = solve(model, **hyperparams, **diff_params, y0 = initial_state)
         print('backward_solution_time:', time.time() - backward_solution_time)
@@ -101,6 +102,8 @@ def main(cfg: DictConfig):
     assert torch.allclose(grad_freq_nadir_1, grad_freq_nadir_2[watched_idx])
     assert torch.isclose(freq_rocof_1, freq_rocof_2[watched_idx])
     assert torch.allclose(grad_freq_rocof_1, grad_freq_rocof_2[watched_idx])
+
+
 
 if __name__ == "__main__":
     main()

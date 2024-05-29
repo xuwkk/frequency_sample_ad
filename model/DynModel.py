@@ -136,13 +136,26 @@ class AugementModel(DynModel):
 
         omega_init = torch.zeros((K.shape[0], 1)).to(K.device)
         # we can only have the minus sign here, see the proof in the paper
+
+        # def get_init_omega_dot(K12):
+        #     return (self.M - torch.sqrt(self.M ** 2 - 4 * K12 * self.delta_P) ) / (2 * K12)
+        
         omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
+        # omega_dot_init = get_init_omega_dot(K[:, 1:2])
         # eliminate nan
         omega_dot_init[torch.isnan(omega_dot_init)] = self.delta_P / self.M
 
         # tangent state
         tangent_state_init = torch.zeros((omega_dot_init.shape[0], K.shape[1] * 2)).to(K.device)
+        # non_zero_entry = torch.autograd.functional.jacobian(get_init_omega_dot, K[:, 1:2])
 
+        # the initial value of thete_2 is different
+        non_zero_entry = (
+            (2*torch.pow(self.M**2 - 4 * K[:, 1:2] * self.delta_P, -0.5)*self.delta_P * K[:, 1:2] - (self.M - torch.sqrt(self.M**2 - 4 * K[:, 1:2] * self.delta_P))
+                ) / (2 * torch.square(K[:, 1:2]))
+                )
+        tangent_state_init[:, 3:4] = non_zero_entry # ! either by AD or by analytical calculation
+        
         return torch.concat([omega_init, omega_dot_init, tangent_state_init], dim=1)
     
     def forward(self, t: float, state: torch.Tensor, K: torch.Tensor, **kwargs):
