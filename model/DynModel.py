@@ -102,13 +102,29 @@ class SimpleModel_omega_omegadot_feedback(DynModel):
     def get_initial_state(self, K: torch.Tensor):
         omega_init = torch.zeros((K.shape[0], 1)).to(K.device)
         # we can only have the minus sign here
-        omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
-        # eliminate nan
-        omega_dot_init[torch.isnan(omega_dot_init)] = self.delta_P / self.M
+        non_zero_idx = torch.where(K[:, 1:2] != 0)[0]
+        omega_dot_init = torch.zeros((K.shape[0], 1)).to(K.device)
+        omega_dot_init[non_zero_idx] = (self.M - torch.sqrt(self.M ** 2 - 4 * K[non_zero_idx, 1:2] * self.delta_P) ) / (2 * K[non_zero_idx, 1:2])
+        zero_idx = torch.where(K[:, 1:2] == 0)[0]
+        omega_dot_init[zero_idx] = self.delta_P / self.M
+        # omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
+        # # eliminate nan
+        # omega_dot_init[torch.isnan(omega_dot_init)] = self.delta_P / self.M
+
+        assert torch.isnan(omega_dot_init).sum() == 0, 'nan found in omega_dot_init'
 
         initial_state = torch.concat([omega_init, omega_dot_init], dim=1)
 
         return initial_state
+    
+    def get_initial_state_single(self, K: torch.Tensor):
+        omega_init = torch.zeros(1).to(K.device)
+        # todo: in vmap we cannot use the if else statement, let's just assume K12 is not zero
+        # see: https://github.com/pytorch/functorch/issues/257
+        omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[1] * self.delta_P) ) / (2 * K[1])
+        
+        return torch.concat([omega_init, omega_dot_init])
+
     
     def forward(self, t: float, state: torch.Tensor, K: torch.Tensor, **kwargs):
         omega, omega_dot = state[:,0:1], state[:,1:2]
@@ -125,6 +141,27 @@ class SimpleModel_omega_omegadot_feedback(DynModel):
             + self.delta_P / (self.tau * M)
                         )
         return torch.concat([d_omega, d_omega_dot], dim=1)
+    
+    def forward_single(self, t: float, state: torch.Tensor, K: torch.Tensor, **kwargs):
+        """
+        forward pass for one sample
+        """
+
+        omega, omega_dot = state[0], state[1]
+        d_omega = omega_dot
+
+        # the feedback on M and D
+        M = self.M - K[0] * omega - K[1] * omega_dot
+        D = self.D - K[2] * omega - K[3] * omega_dot
+
+        # same as before
+        d_omega_dot = (
+            -(1/(self.r * self.tau * M ) + D / (self.tau * M)) * omega
+            - (D / M + 1/self.tau) * omega_dot
+            + self.delta_P / (self.tau * M)
+                        )
+
+        return torch.concat([d_omega.unsqueeze(0), d_omega_dot])
 
 class AugementModel(DynModel):
 
@@ -140,10 +177,19 @@ class AugementModel(DynModel):
         # def get_init_omega_dot(K12):
         #     return (self.M - torch.sqrt(self.M ** 2 - 4 * K12 * self.delta_P) ) / (2 * K12)
         
-        omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
+        non_zero_idx = torch.where(K[:, 1:2] != 0)[0]
+        omega_dot_init = torch.zeros((K.shape[0], 1)).to(K.device)
+        omega_dot_init[non_zero_idx] = (self.M - torch.sqrt(self.M ** 2 - 4 * K[non_zero_idx, 1:2] * self.delta_P) ) / (2 * K[non_zero_idx, 1:2])
+
+        zero_idx = torch.where(K[:, 1:2] == 0)[0]
+        omega_dot_init[zero_idx] = self.delta_P / self.M
+
+        assert torch.isnan(omega_dot_init).sum() == 0, 'nan found in omega_dot_init'
+
+        # omega_dot_init = (self.M - torch.sqrt(self.M ** 2 - 4 * K[:, 1:2] * self.delta_P) ) / (2 * K[:, 1:2])
         # omega_dot_init = get_init_omega_dot(K[:, 1:2])
-        # eliminate nan
-        omega_dot_init[torch.isnan(omega_dot_init)] = self.delta_P / self.M
+        # eliminate nan: nan may be caused by the square root or because K12 is zero
+        # omega_dot_init[torch.isnan(omega_dot_init)] = self.delta_P / self.M
 
         # tangent state
         tangent_state_init = torch.zeros((omega_dot_init.shape[0], K.shape[1] * 2)).to(K.device)
@@ -154,6 +200,11 @@ class AugementModel(DynModel):
             (2*torch.pow(self.M**2 - 4 * K[:, 1:2] * self.delta_P, -0.5)*self.delta_P * K[:, 1:2] - (self.M - torch.sqrt(self.M**2 - 4 * K[:, 1:2] * self.delta_P))
                 ) / (2 * torch.square(K[:, 1:2]))
                 )
+        
+        assert torch.isnan(non_zero_entry).sum() == 0, 'nan found in non_zero_entry'
+
+        # non_zero_entry_test = torch.autograd.functional.jacobian(get_init_omega_dot, K[:, 1:2])
+        
         tangent_state_init[:, 3:4] = non_zero_entry # ! either by AD or by analytical calculation
         
         return torch.concat([omega_init, omega_dot_init, tangent_state_init], dim=1)

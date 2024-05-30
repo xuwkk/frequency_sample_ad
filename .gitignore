@@ -1,6 +1,7 @@
 *.png
 *.pdf
 *.ipynb
+*.npy
 delete_file/
 outputs/
 # Byte-compiled / optimized / DLL files

@@ -35,7 +35,12 @@ def solve(f, t0, y0, t1, dt, method = 'euler', **kwargs):
         y_summary.append(y)
     
     if isinstance(y0, torch.Tensor):
-        y_summary = torch.stack(y_summary).transpose(0,1)
+        if y0.dim() == 2:
+            y_summary = torch.stack(y_summary).transpose(0,1)
+        elif y0.dim() == 1:
+            y_summary = torch.stack(y_summary)
+        else:
+            raise ValueError
     else:
         raise NotImplementedError
     

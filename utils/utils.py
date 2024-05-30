@@ -60,6 +60,21 @@ def initialize_model(name, system_params, hyperparams):
         
     return model
 
+def get_K_threshold(system_params):
+    return system_params.M0 **2 / (4 * system_params.delta_P)
+
+def get_K(hyperparams, system_params):
+
+    threshold = get_K_threshold(system_params)
+    K = torch.randn((hyperparams.sample_no, 4), device = hyperparams.device) * hyperparams.k_range
+
+    if system_params.delta_P > 0:
+        K[:, 1] = torch.clamp(K[:, 1], -1e6, threshold * 0.8) # ! to avoid the rounding error
+    else:
+        K[:, 1] = torch.clamp(K[:, 1], threshold * 0.8, 1e6)
+    
+    return K
+
 def plot(omega, d_omega, title, cfg):
 
     hyperparams = cfg['hyperparams']

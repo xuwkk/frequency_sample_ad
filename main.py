@@ -2,13 +2,9 @@ from model import AugementModel, fmad_sampler
 import torch
 from omegaconf import DictConfig, OmegaConf
 import hydra
-import torch.autograd.forward_ad as fwAD
-from torch.autograd.functional import jacobian
-from torch.func import jvp
-from functools import partial
-from utils import set_random_seed
+from utils import set_random_seed, to_numpy, initialize_model, get_K, get_K_threshold
 from ode_solver import solve
-import time
+import numpy as np
 
 
 @hydra.main(version_base=None, config_path="conf/", config_name="config")
@@ -20,30 +16,26 @@ def main(cfg: DictConfig):
 
     hyperparams = cfg['hyperparams']
     system_params = cfg['system_params']
-    """
-    the omega-omegadot model with state feedback
-    """
 
-    cons_params = {
-        "delta_P": system_params.delta_P,
-        "tau": system_params.tau,
-        "r": system_params.r,
-        "M": system_params.M0,  # ! regard as constant parameter
-        "D": system_params.D0,
-    }
+    # K = torch.randn((hyperparams.sample_no, 4), device = hyperparams.device) * 100
+    K = get_K(hyperparams, system_params)
+    K_threshold = get_K_threshold(system_params)
 
-    K = torch.randn((hyperparams.sample_no, 4), device = hyperparams.device) * 100
+    print('initial data size:', K.shape)
 
     diff_params = {
         "K": K,
     }
 
-    model = AugementModel(cons_params, device = hyperparams.device)
+    model = initialize_model(name = 'AugementModel', 
+                            system_params=system_params, hyperparams=hyperparams)
 
-    fmad_sampler(model, K, cfg, solve)
+    K_all, stability_all = fmad_sampler(model, K, cfg, solve, K_threshold)
 
+    K_all, stability_all = to_numpy(K_all), to_numpy(stability_all)
 
-
+    np.save('K_all.npy', K_all)
+    np.save('stability_all.npy', stability_all)
 
 if __name__ == "__main__":
     main()
